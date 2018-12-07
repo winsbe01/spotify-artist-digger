@@ -62,6 +62,48 @@ def track_string(sp, uri):
     track_info = sp.track(uri)
     return str(track_info['name']) + " (" + str(track_info['album']['name']) + ", track " + str(track_info['track_number']) + ")"
 
+    attr_to_id_map = {}
+    for track in tracks_analysis.keys():
+        a = tracks_analysis[track][0][attribute]
+        if a in attr_to_id_map:
+            attr_to_id_map[a].append(track)
+        else:
+            attr_to_id_map[a] = [track]
+    return attr_to_id_map
+    
+def track_map(tracks_analysis, attribute):
+    id_to_attr_map = {}
+    for track in tracks_analysis.keys():
+        id_to_attr_map[track] = tracks_analysis[track][0][attribute]
+
+def attr_maps(tracks_analysis, attribute):
+    # initialize maps
+    attr_to_id_map = {}
+    id_to_attr_map = {}
+
+    for track in tracks_analysis.keys():
+        # get the desired attribute
+        a = tracks_analysis[track][0][attribute]
+        
+        # assign id to the attribute
+        id_to_attr_map[track] = a
+
+        if a in attr_to_id_map:
+            attr_to_id_map[a].append(track)
+        else:
+            attr_to_id_map[a] = [track]
+
+    return (attr_to_id_map, id_to_attr_map)
+
+def attr_median(attr_maps):
+    # find the median
+    med = statistics.median(list(attr_maps[1].values()))
+    return attr_maps[0][med]
+
+def attr_mean(attr_map):
+    # calculate the mean
+    return round(statistics.mean(attr_map.keys()),3)
+
 def attr_mean_calc(tracks_analysis, attribute):
     # assemble list of targeted attribute
     attr_list = []
@@ -86,6 +128,17 @@ def attr_mean_calc(tracks_analysis, attribute):
 
     return track_list
     
+# calculate the difference from the median for the given attribute
+def obj_median(track_analysis, attribute):
+    attr_list = map(lambda x: track_analysis[x][0][attribute], track_analysis.keys())
+    med = statistics.median(attr_list)
+    
+    ret = {}
+    for track in track_analysis.keys():
+        ret[track] = abs(round(track_analysis[track][0][attribute] - med,8))
+
+    return ret
+
 """
 Main Running Code
 """
@@ -102,50 +155,39 @@ print("Found", len(albums), "albums...")
 
 # get the tracks
 track_uris = []
-#for album in albums_res:
-    #print(item['name'] + ' - ' + item['uri'] + ' - ' + str(item['available_markets']))
-
 for album in albums:
     track_uris.extend(track_list_uris(sp, album))
-    #tracks_res = sp.album_tracks(album)['items']
-    #for track in tracks_res:
-    #    track_uris.append(track['uri'])
-    #print(item['name'])
-
 print(len(track_uris), "songs total...")
-
 print("Getting track analysis...")
 
-#print(track_uris)
+# analyze the tracks
 track_analysis = {}
 for track in track_uris:
     track_analysis[track] = sp.audio_features(track)
 
-mean_tempo_list = attr_mean_calc(track_analysis, 'tempo')
-print("Mean tempo:", track_string(sp, mean_tempo_list[0]))
-#print(sp.track(mean_tempo_list[0])['name'])
+# run medians on all our vectors
+danceabilities = obj_median(track_analysis, 'danceability')
+energies = obj_median(track_analysis, 'energy')
+speechiness = obj_median(track_analysis, 'speechiness')
+acousticness = obj_median(track_analysis, 'acousticness')
+instrumentalness = obj_median(track_analysis, 'instrumentalness')
+liveness = obj_median(track_analysis, 'liveness')
+valence = obj_median(track_analysis, 'valence')
 
-mean_dance_list = attr_mean_calc(track_analysis, 'danceability')
-print("Mean dancibility:", track_string(sp, mean_dance_list[0]))
+# sum up all medians per track
+track_sums = {}
+for track in track_uris:
+    track_sums[track] = danceabilities[track] + energies[track] + speechiness[track] + acousticness[track] + instrumentalness[track] + liveness[track] + valence[track]
 
-mean_energy_list = attr_mean_calc(track_analysis, 'energy')
-print("Mean energy:", track_string(sp, mean_energy_list[0]))
-
-"""
-tempo_map = {}
-tempo_list = []
-for track_uri in track_uris:
-    tempo_map[track_uri] = track_analysis[track_uri][0]['tempo']
-    tempo_list.append(track_analysis[track_uri][0]['tempo'])
-
-tempo_mean = round(statistics.mean(tempo_list),3)
-
-tempo_diffs = map(lambda x: abs(round(tempo_mean - x,3)), tempo_list)
-
-tempo_diff_min = min(list(tempo_diffs))
-
-for track_uri in track_uris:
-    cur_tempo = tempo_map[track_uri]
-    if abs(round(cur_tempo - tempo_mean,3)) == tempo_diff_min:
-        print(track_uri)
-"""
+# calculate the min and max
+mn = min(track_sums.values())
+mnurl = None
+mx = max(track_sums.values())
+mxurl = None
+for track in track_uris:
+    if track_sums[track] == mn:
+        mnurl = track
+    if track_sums[track] == mx:
+        mxurl = track
+print("Most median song:", track_string(sp, mnurl))
+print("Least median song:", track_string(sp, mxurl))
